@@ -9,7 +9,14 @@ from .auth.auth import AuthError, requires_auth
 
 app = Flask(__name__)
 setup_db(app)
-CORS(app)
+
+CORS(app,resources={r"*": {"origins": "*"}})
+# CORS Headers 
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,true')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH')
+    return response
 
 '''
 @TODO uncomment the following line to initialize the datbase
@@ -31,7 +38,7 @@ db_drop_and_create_all()
 def get_drinks():
     try:
         query = Drink.query.all()
-        if len(query) < 1:
+        if len(query) < 0:
             abort(404)
         drinks = [drink.short() for drink in query]
         return jsonify({
@@ -56,7 +63,7 @@ def get_drinks():
 def get_drinks_details(payload):
     try: 
         query = Drink.query.all()
-        if len(query) < 1:
+        if len(query) < 0:
             abort(404)
         drinks = [drink.long() for drink in query]
         return jsonify ({
@@ -78,17 +85,24 @@ def get_drinks_details(payload):
 @app.route('/drinks', methods=['POST'])
 @requires_auth('post:drinks')
 def add_new_drink(payload):
+    user_input = request.get_json()
+    if 'title' not in user_input:
+        abort(400)
+    if 'recipe' not in user_input:
+        abort(400)
     req_title = request.get_json()['title'] #string title
     req_recipe = []
-    recipes = request.get_json()['recipe']
-    print(recipes)
+    recipes = request.get_json()['recipe'] #{'color': string, 'name':string, 'parts':number}
     for recipe in recipes:
-        req_recipe.append(recipe) #[{'color': string, 'name':string, 'parts':number}]
+        req_recipe.append(recipe) 
     try:
-        drink = Drink(title=req_title, recipe=json.dumps(req_recipe))
-        drink.insert()
+        new_drink = Drink(title=req_title, recipe=json.dumps(req_recipe))
+        new_drink.insert()
+        refresh = Drink.query.all()
+        drinks = [drink.short() for drink in refresh]
         return jsonify ({
-            'success': True
+            'success': True,
+            'drinks': drinks
         })
     except:
         abort(400)
@@ -109,11 +123,13 @@ def add_new_drink(payload):
 @requires_auth('patch:drinks')
 def update_drinks(payload, drink_id):
     new_title = request.get_json()['title']
+    new_recipe = request.get_json()['recipe']
     try:
         drink = Drink.query.filter(Drink.id == drink_id).one_or_none()
         if drink is None:
             abort(404)
         drink.title = new_title
+        drink.recipe = json.dumps(new_recipe)
         drink.update()
         return jsonify ({
             'success': True, 
@@ -142,7 +158,8 @@ def delete_drink(payload, drink_id):
             abort(404)
         drink.delete()
         return jsonify ({
-            'success': True
+            'success': True,
+            'delete': drink_id
         })
     except:
         abort(400)  
